@@ -4,7 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const server = http.createServer(app);
-
+require('dotenv').config(); // Ye line sabse upar honi chahiye
 // CORS fix for Socket.io
 const io = socketIO(server, {
   cors: {
@@ -14,9 +14,7 @@ const io = socketIO(server, {
   }
 });
 
-require("dotenv").config({
-  path: "./.env",
-});
+
 
 app.use(cors());
 app.use(express.json());
