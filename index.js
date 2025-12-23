@@ -2,33 +2,52 @@ const socketIO = require("socket.io");
 const http = require("http");
 const express = require("express");
 const cors = require("cors");
+const mongoose = require("mongoose");
 const app = express();
 const server = http.createServer(app);
-require('dotenv').config(); // Ye line sabse upar honi chahiye
-// CORS fix for Socket.io
+
+// Environment variables configuration
+require('dotenv').config();
+
+// FIX: MongoDB Connection Logic (Ye zaroori tha)
+mongoose.connect(process.env.DB_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then((data) => {
+    console.log(`Connected to MongoDB: ${data.connection.host}`);
+})
+.catch((err) => {
+    console.log(`MongoDB connection failed: ${err.message}`);
+    // Railway par crash hone se bachne ke liye process exit nahi kar rahe
+});
+
+// Middlewares
+app.use(cors({
+    origin: ["https://multivendor-fronted.vercel.app", "http://localhost:3000"],
+    credentials: true
+}));
+app.use(express.json());
+
+// Socket.io Setup with CORS fix
 const io = socketIO(server, {
   cors: {
-    origin: ["https://multivendor-fronted.vercel.app", "http://localhost:3000"], // Apne Vercel ka URL yahan lazmi check karein
+    origin: ["https://multivendor-fronted.vercel.app", "http://localhost:3000"],
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-
-
-app.use(cors());
-app.use(express.json());
-
 app.get("/", (req, res) => {
   res.send("Socket server is running live!");
 });
 
-// ... baaqi aapka sara logic (users, messages etc.) same rahega ...
 let users = [];
 
 const addUser = (userId, socketId) => {
-  !users.some((user) => user.userId === userId) &&
+  if (!users.some((user) => user.userId === userId)) {
     users.push({ userId, socketId });
+  }
 };
 
 const removeUser = (socketId) => {
@@ -45,43 +64,25 @@ const createMessage = ({ senderId, receiverId, text, images }) => ({
   text,
   images,
   seen: false,
+  createdAt: new Date(),
 });
 
 io.on("connection", (socket) => {
-  console.log(`a user is connected`);
+  console.log(`a user is connected: ${socket.id}`);
 
   socket.on("addUser", (userId) => {
     addUser(userId, socket.id);
     io.emit("getUsers", users);
   });
 
-  const messages = {}; 
-
   socket.on("sendMessage", ({ senderId, receiverId, text, images }) => {
     const message = createMessage({ senderId, receiverId, text, images });
     const user = getUser(receiverId);
 
-    if (!messages[receiverId]) {
-      messages[receiverId] = [message];
-    } else {
-      messages[receiverId].push(message);
-    }
-
-    // Yahan console.log karein taake Railway logs mein dikhe ke message ja raha hai
     console.log("Sending message to:", receiverId);
-    io.to(user?.socketId).emit("getMessage", message);
-  });
-
-  socket.on("messageSeen", ({ senderId, receiverId, messageId }) => {
-    const user = getUser(senderId);
-    if (messages[senderId]) {
-      const message = messages[senderId].find(
-        (m) => m.receiverId === receiverId && m.id === messageId
-      );
-      if (message) {
-        message.seen = true;
-        io.to(user?.socketId).emit("messageSeen", { senderId, receiverId, messageId });
-      }
+    
+    if (user) {
+      io.to(user.socketId).emit("getMessage", message);
     }
   });
 
@@ -96,7 +97,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Railway will automatically provide a PORT
+// Railway provided PORT or 4000
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
