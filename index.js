@@ -10,16 +10,13 @@ const server = http.createServer(app);
 require('dotenv').config();
 
 // FIX: MongoDB Connection Logic (Ye zaroori tha)
-mongoose.connect(process.env.DB_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
+// Database connection (Updated for new Mongoose versions)
+mongoose.connect(process.env.DB_URL)
 .then((data) => {
     console.log(`Connected to MongoDB: ${data.connection.host}`);
 })
 .catch((err) => {
     console.log(`MongoDB connection failed: ${err.message}`);
-    // Railway par crash hone se bachne ke liye process exit nahi kar rahe
 });
 
 // Middlewares
