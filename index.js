@@ -6,11 +6,9 @@ const mongoose = require("mongoose");
 const app = express();
 const server = http.createServer(app);
 
-// Environment variables configuration
 require('dotenv').config();
 
-// FIX: MongoDB Connection Logic (Ye zaroori tha)
-// Database connection (Updated for new Mongoose versions)
+// MongoDB Connection
 mongoose.connect(process.env.DB_URL)
 .then((data) => {
     console.log(`Connected to MongoDB: ${data.connection.host}`);
@@ -19,14 +17,14 @@ mongoose.connect(process.env.DB_URL)
     console.log(`MongoDB connection failed: ${err.message}`);
 });
 
-// Middlewares
+// Middlewares - Updated CORS
 app.use(cors({
     origin: ["https://multivendor-fronted.vercel.app", "http://localhost:3000"],
     credentials: true
 }));
 app.use(express.json());
 
-// Socket.io Setup with CORS fix
+// Socket.io Setup
 const io = socketIO(server, {
   cors: {
     origin: ["https://multivendor-fronted.vercel.app", "http://localhost:3000"],
@@ -42,7 +40,7 @@ app.get("/", (req, res) => {
 let users = [];
 
 const addUser = (userId, socketId) => {
-  if (!users.some((user) => user.userId === userId)) {
+  if (userId && !users.some((user) => user.userId === userId)) {
     users.push({ userId, socketId });
   }
 };
@@ -55,46 +53,38 @@ const getUser = (receiverId) => {
   return users.find((user) => user.userId === receiverId);
 };
 
-const createMessage = ({ senderId, receiverId, text, images }) => ({
-  senderId,
-  receiverId,
-  text,
-  images,
-  seen: false,
-  createdAt: new Date(),
-});
-
 io.on("connection", (socket) => {
   console.log(`a user is connected: ${socket.id}`);
 
+  // FIX: Frontend se ID receive karne ka event
   socket.on("addUser", (userId) => {
     addUser(userId, socket.id);
+    console.log(`Success: User ${userId} is now online.`); 
     io.emit("getUsers", users);
   });
 
   socket.on("sendMessage", ({ senderId, receiverId, text, images }) => {
-    const message = createMessage({ senderId, receiverId, text, images });
     const user = getUser(receiverId);
-
-    console.log("Sending message to:", receiverId);
+    const message = {
+        senderId,
+        receiverId,
+        text,
+        images,
+        createdAt: new Date()
+    };
     
     if (user) {
       io.to(user.socketId).emit("getMessage", message);
     }
   });
 
-  socket.on("updateLastMessage", ({ lastMessage, lastMessagesId }) => {
-    io.emit("getLastMessage", { lastMessage, lastMessagesId });
-  });
-
   socket.on("disconnect", () => {
-    console.log(`a user disconnected!`);
+    console.log(`a user disconnected: ${socket.id}`);
     removeUser(socket.id);
     io.emit("getUsers", users);
   });
 });
 
-// Railway provided PORT or 4000
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
